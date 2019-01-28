@@ -19,8 +19,8 @@ int mode = MODE;
 
 unsigned long value = 0;
 unsigned long prev = 0xFFFFAFFF;
-byte red = 255;
-byte green = 255;
+byte red = 0;
+byte green = 0;
 byte blue = 255;
 int i = 0;
 int first = 0;

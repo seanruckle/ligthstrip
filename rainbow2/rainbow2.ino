@@ -1,10 +1,10 @@
 #include <PololuLedStrip.h>
-#define LED_COUNT 30
+#define LED_COUNT 300
 #define LED_MAX 300
 #define ON 1
 #define OFF 2
 #define WAVE ON
-#define DELAY 50
+#define DELAY 5
 
 int y;
 int x;
