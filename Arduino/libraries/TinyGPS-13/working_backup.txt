@@ -1,0 +1,172 @@
+
+
+#define CAR_ID 2  // This should be different for each vehicle. Change before uploading.
+
+#include "key_defines.h"
+
+#include<Wire.h>      //I2C used for the IMU
+#include "TinyGPS.h"  //for the GPS we use
+#include <SPI.h>      //The protocol the SD card uses
+#include <SD.h>       //This is for the SD card
+//#include <Serial.h>
+
+/*
+  SD card read/write
+  This example shows how to read and write data to and from an SD card file
+  The circuit:
+   SD card attached to SPI bus as follows on MEGA
+ ** MOSI - pin 51
+ ** MISO - pin 50
+ ** CLK - pin 52
+ ** CS - pin 53
+  This example code is in the public domain.
+*/
+File myFile; // declare your file handle
+
+//int x;
+const int MPU = 0x68; // I2C address of the MPU-6050
+int16_t AcX, AcY, AcZ, Tmp, GyX, GyY, GyZ; //the variables that store the info for the IMU data
+int16_t I;      //instance of IMU data
+
+static long lat, lon;  //static trades a small sdram cost for a small increase in speed
+byte mph;
+long age, date, time, chars = 0;
+unsigned short sentences = 0, failed = 0;
+unsigned long millis_old;
+String stringy;
+TinyGPS gps;
+
+static bool feedgps()
+{
+  while (Serial2.available())   //while you can read from the GPS
+  {
+    byte c = Serial2.read();
+    // Serial.write(c);
+    if (gps.encode(c)) {  //If you can read the info return true
+      return true;
+    }
+  }
+  return false;     //otherwise return false
+}
+
+void setup() {
+  // put your setup code here, to run once:
+  Wire.begin();
+  Wire.beginTransmission(MPU);
+  Wire.write(0x6B);  // PWR_MGMT_1 register
+  Wire.write(0);     // set to zero (wakes up the MPU-6050)
+  Wire.endTransmission(true);
+  I = 0;
+  Serial.begin(115200);
+  Serial2.begin(4800);
+  Serial3.begin(115200, SERIAL_8E1);
+
+  Serial.println("Initializing SD card...");
+
+  //this statement checks twice for a card working and ends if not
+  //otherwise its good to go
+  if (!SD.begin(53)) {
+    Serial.println("initialization failed, trying again!");
+    if (!SD.begin(53)) {
+      Serial.println("initialization failed twice, aborting");
+      return;
+    }
+  }
+  Serial.println("initialization done.");
+
+
+  // Check to see if file exists already, delete it if it does:
+  if (SD.exists("november.csv"))
+  {
+    Serial.println("Found existing file, not deleting..");
+    // SD.remove("november.csv"); v
+  }
+  // If you choose not to delete it, then further writing will append to the
+  // existing contents. You could ask over the serial port to delete or append?
+millis_old = millis();
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+  I++;        //increase the counter that this is
+  while(!feedgps());
+  gps.get_position(&lat, &lon, &age);
+  mph = gps.f_speed_mph();
+  gps.stats(&chars, &sentences, &failed);
+  gps.get_datetime(&date, &time, &age);
+  //End of GPS stuffs
+
+
+  Wire.beginTransmission(MPU);
+  Wire.write(0x3B);   // starting with register 0x3B (ACCEL_XOUT_H)
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU, 14, true); // request a total of 14 registers
+  AcX = Wire.read() << 8 | Wire.read(); // 0x3B (ACCEL_XOUT_H) & 0x3C (ACCEL_XOUT_L)     This does stuffs
+  AcY = Wire.read() << 8 | Wire.read(); // 0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)     specifically it gets 16 bits of info instead of just 8
+  AcZ = Wire.read() << 8 | Wire.read(); // 0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)     done by a bitshift and a bitwise or
+  Tmp = Wire.read() << 8 | Wire.read(); // 0x41 (TEMP_OUT_H) & 0x42 (TEMP_OUT_L)         thats not important; it works
+  GyX = Wire.read() << 8 | Wire.read(); // 0x43 (GYRO_XOUT_H) & 0x44 (GYRO_XOUT_L)
+  GyY = Wire.read() << 8 | Wire.read(); // 0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
+  GyZ = Wire.read() << 8 | Wire.read(); // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
+  //prints all the IMU data
+//  /* Serial.print("");*/ Serial.print(AcX);
+//  Serial.print(", "); Serial.print(AcY);
+//  Serial.print(", "); Serial.print(AcZ);
+//  Serial.print(", "); Serial.print(Tmp/*/340.00+36.53*/);  //equation for temperature in degrees C from datasheet
+
+
+//all of this is putting all the info in a string to print it all at once
+  stringy = String("#," +String(I)+"," +(NUMBER_KEYS) +String(",17") + ","+ID+"," + CAR_ID + ","+LAT+",");
+  String stringy1 = String(lat, 10);
+  stringy = String(stringy + stringy1);
+  stringy1 = String(lon, 10);
+  stringy = String(stringy +  ","+LON+"," + stringy1);
+  stringy1 = String(gps.altitude());
+  stringy = String(stringy + ","+ALTITUDE+"," + stringy1);
+  stringy1 = String(gps.course());
+  stringy = String(stringy + ","+HEADING+"," + stringy1);
+  stringy1 = String(mph);
+  stringy = String(stringy + ","+MPH+"," + stringy1);
+  stringy1 = String(date);
+  stringy = String(stringy + ","+DATE+"," + stringy1);
+  stringy1 = String(time);
+  stringy = String(stringy + ","+TIME+"," + stringy1);
+  stringy1 = String(AcX);
+  stringy = String(stringy + ","+ACC_X+"," + stringy1);
+  stringy1 = String(AcY);
+  stringy = String(stringy + ","+ACC_Y+"," + stringy1);
+  stringy1 = String(AcZ);
+  stringy = String(stringy + ","+ACC_Z+"," + stringy1);
+  stringy1 = String(Tmp);
+  stringy = String(stringy + ","+TEMP+"," + stringy1);
+  stringy1 = String(GyX);
+  stringy = String(stringy + ","+GYR_X+"," + stringy1);
+  stringy1 = String(GyY);
+  stringy = String(stringy + ","+GYR_Y+"," + stringy1);
+  stringy1 = String(GyZ);
+  stringy = String(stringy + ","+GYR_Z+"," + stringy1 + ",!");
+  feedgps();
+  Serial3.println(stringy);
+  Serial.println(stringy);
+
+
+  //end of all the printing IMU data for the xbee
+
+  // Open a file:
+  //myFile = SD.open("november.csv", FILE_WRITE); // Opening a file, use 8.3 naming. the myFile
+  // variable is now a "handle" to the file
+  // FILE_WRITE means we are writing to the file
+
+  //Serial.println("Opening data.csv and writing to it...");
+  // Write to the file if it opened OK
+  //if (myFile) // Tests if open was successful (not null value but a good handle)
+  //{
+  //  myFile.println(stringy);
+  //  myFile.close(); // Closes the file since we are done
+ // }
+  feedgps();
+  while((millis()-millis_old)<100);
+  millis_old=millis();
+
+
+}
